@@ -1,123 +1,119 @@
-use octocrab::{Octocrab};
-use std::env;
-use octocrab::Error as OctocrabError;
-use std::process::Command;
-use std::str;
+use core::panic;
 use dotenv::dotenv;
-use std::error::Error;
+use std::env;
+use std::process::Command;
 
 #[derive(Debug)]
-enum Branch {
-    BUGFIX,
-    HOTFIX,
-    FEATURE
+enum HeadMode {
+    Feature,
+    BugFix,
+    HotFix,
 }
 
-
-struct GitHubUser {
-    id: String,
+enum BaseMode {
+    Feature,
+    BugFix,
+    HotFix,
+}
+#[derive(Debug)]
+struct Head {
     name: String,
+    mode: HeadMode
 }
 
-struct GitHubRepo {
-    url: String,
-    name: String
-}
-
-struct GitHubPullRequest {
+#[derive(Debug)]
+struct Base {
     name: String,
-    from: String,
-    to: String
+    labels: Vec<String>,
 }
 
-
-// # TODO
-// Get current repo
-
-#[tokio::main]
-async fn main() -> Result<(), OctocrabError> {
+fn main() {
     dotenv().ok();
 
-    let octocrab = instance_octocrab();
-    let owner = get_current_user(&octocrab).await;    
-    let repo = get_repo_name();
-
-    // Use Tokio
-    // create_pr(&octocrab, owner, repo).await;
-
-    Ok(())
-}
-
-fn instance_octocrab() -> Octocrab {
-    let gh = env::var("GIT_TOKEN").expect("$GIT_TOKEN is not set");
-    return Octocrab::builder().personal_token(gh).build().unwrap();
-}
-
-async fn get_current_user(octocrab: &Octocrab) -> GitHubUser{
-    let current_user = octocrab.current()
-    .user()
-    .await;
-
-    match current_user {
-        Ok(user) => return GitHubUser {
-            id: user.id.to_string(),
-            name: user.login
-        },
-        Err(message) => panic!("Error at get user {}", message)
-    }
-}
-
-fn get_repo_name() -> GitHubRepo{
     let repo_path = match env::var("REPO_PATH") {
         Ok(value) => value,
-        Err(_) => String::from("./")
-
+        Err(_) => panic!("Set ENV var REPO_PATH"),
     };
 
+    let head = get_head(&repo_path);
+    let head = Head {
+        mode: get_head_type(&head),
+        name: head
+    };
+
+    let base = get_base(&head);
+    let base = base.iter().map(|x| Base{
+        name: x.to_string(),
+        labels: get_base(&head)
+    }).collect::<Vec<_>>();
+
+    // let pr_url = create_pr(&repo_path);
+
+    println!("base => {:?}", base);
+    println!("head => {:?}", head);
+}
+
+fn get_head(repo_path: &String) -> String {
     let output = Command::new("git")
         .current_dir(repo_path)
-        .arg("config")
-        .arg("--get")
-        .arg("remote.origin.url")
-        .output().unwrap();
+        .arg("symbolic-ref")
+        .arg("HEAD")
+        .output();
 
-    let url = String::from_utf8(output.stdout).unwrap();   
-   
-    return GitHubRepo {
-        name: between(&url, "/", ".git"),
-        url: url
-    };  
+    let command_response = match output {
+        Ok(value) => value,
+        Err(err) => panic!("Error at get head {}", err),
+    };
+
+    return String::from_utf8(command_response.stdout)
+        .unwrap()
+        .replace("refs/heads/", "");
 }
 
-fn between(line: &String, start: &str, end: &str) -> String {
-    let start_bytes = line.find(start).unwrap_or(0); 
-    let end_bytes = line.find(end).unwrap_or(line.len()); 
-    return String::from(&line[start_bytes+1..end_bytes]);
-}
-
-async fn create_pr(octocrab: &Octocrab, owner: &str, repo: &str) {
-    let pr =  octocrab 
-    .pulls(owner, repo)
-    .create("title", "gusttavodev-patch-1", "master")
-    .body("hello world!")
-    .send().await;
-
-    match pr {
-        Ok(data) => println!("{:?}", data),
-        Err(message) => panic!("Error at creating PR {}", message)
+fn get_head_type(head: &String) -> HeadMode {
+    let head = head.to_lowercase();
+    match head {
+        head if head.contains("feature") => HeadMode::Feature,
+        head if head.contains("bugfix") => HeadMode::BugFix,
+        head if head.contains("hotfix") => HeadMode::HotFix,
+        _ => panic!("Your current branch name don't match with gitflow patter")
     }
 }
 
-async fn request_review() -> Result<(), Box<dyn Error>>{
-    // https://docs.github.com/en/rest/pulls/review-requests#request-reviewers-for-a-pull-request
-    // let gh = env::var("GIT_TOKEN").expect("$GIT_TOKEN is not set");
-    // let route = "https://api.github.com/repos/OWNER/REPO/pulls/PULL_NUMBER/requested_reviewers\";
-    // let resp = reqwest::get("https://httpbin.org/ip")
-    // .await?
-    // .text()
-    // .await?;
+fn get_base(head: &Head) -> Vec<String>{    
+    match head.mode {
+        HeadMode::Feature => return get_base_env(String::from("FEATURE_TARGETS")),
+        HeadMode::BugFix => return get_base_env(String::from("BUGFIX")),
+        HeadMode::HotFix => return get_base_env(String::from("HOTFIX_TARGETS")),
+    }
+}
 
-    // println!("RESPONSE => {:#?}", resp);
+fn get_base_env(mode: String) -> Vec<String>{
+   let response: Vec<String> = Vec::from_iter(env::var(mode).unwrap().split(",").map(String::from));
+   return response;
+}
 
-    // Ok(())
+fn create_pr(repo_path: &String) -> String {
+
+    return String::from("");
+    let output = Command::new("gh")
+        .current_dir(repo_path)
+        .arg("pr")
+        .arg("create")
+        .arg("--title")
+        .arg("Test title")
+        .arg("--body")
+        .arg("The PR body test")
+        .arg("--base")
+        .arg("master")
+        .arg("--head")
+        .arg("pogg")
+        .output();
+
+    let command_response = match output {
+        Ok(value) => value,
+        Err(err) => panic!("Error at create PR {}", err),
+    };
+
+    return String::from_utf8(command_response.stdout).unwrap();
 }
