@@ -4,6 +4,7 @@ use std::env;
 use std::process::Command;
 
 #[derive(Debug)]
+#[derive(Clone)]
 enum HeadMode {
     Feature,
     BugFix,
@@ -16,15 +17,24 @@ enum BaseMode {
     HotFix,
 }
 #[derive(Debug)]
+#[derive(Clone)]
 struct Head {
     name: String,
     mode: HeadMode
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct Base {
     name: String,
     labels: Vec<String>,
+}
+
+#[derive(Debug)]
+struct PR {
+    base: Base,
+    head: Head,
+    url: String,
 }
 
 fn main() {
@@ -47,10 +57,13 @@ fn main() {
         labels: get_base(&head)
     }).collect::<Vec<_>>();
 
-    // let pr_url = create_pr(&repo_path);
+    let prs = base.iter().map(|x| PR{
+        base: x.clone(),
+        head: head.clone(),
+        url: create_pr(&repo_path, &x, &head),
+    }).collect::<Vec<_>>();
 
-    println!("base => {:?}", base);
-    println!("head => {:?}", head);
+    println!("TEMOS => {:?}", prs);
 }
 
 fn get_head(repo_path: &String) -> String {
@@ -67,7 +80,8 @@ fn get_head(repo_path: &String) -> String {
 
     return String::from_utf8(command_response.stdout)
         .unwrap()
-        .replace("refs/heads/", "");
+        .replace("refs/heads/", "")
+        .replace("\n", "");
 }
 
 fn get_head_type(head: &String) -> HeadMode {
@@ -93,9 +107,8 @@ fn get_base_env(mode: String) -> Vec<String>{
    return response;
 }
 
-fn create_pr(repo_path: &String) -> String {
+fn create_pr(repo_path: &String, base: &Base, head: &Head) -> String {
 
-    return String::from("");
     let output = Command::new("gh")
         .current_dir(repo_path)
         .arg("pr")
@@ -105,15 +118,18 @@ fn create_pr(repo_path: &String) -> String {
         .arg("--body")
         .arg("The PR body test")
         .arg("--base")
-        .arg("master")
+        .arg(&base.name)
         .arg("--head")
-        .arg("pogg")
+        .arg(&head.name)
         .output();
 
     let command_response = match output {
         Ok(value) => value,
         Err(err) => panic!("Error at create PR {}", err),
     };
+    // println!("base => {:?}", &base.name);
+    // println!("head => {:?}", &head.name);
+    // println!("COMMAND => {:?}", command_response);
 
-    return String::from_utf8(command_response.stdout).unwrap();
+    return String::from_utf8(command_response.stdout).unwrap().replace("\n", "");
 }

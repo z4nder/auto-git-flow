@@ -1,0 +1,12 @@
+GIT_TOKEN=""
+REPO_PATH="/home/gadsdev/projects/personal/test"
+
+HOTFIX_TARGETS="develop,staging"
+BUGFIX_TARGETS="develop"
+FEATURE_TARGETS="develop"
+
+HOTFIX_LABELS="hotfix,bug"
+BUGFIX_LABELS="bugfix,bug"
+FEATURE_LABELS="feature"
+
+DEFAULT_LABELS="waiting code review"
