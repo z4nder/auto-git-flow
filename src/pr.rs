@@ -20,18 +20,15 @@ pub mod pr {
         }).collect::<Vec<_>>();    
     }
 
-    fn create_pr(repo_path: &String, base: &Base, head: &Head) -> String {
-
-        println!("!Head {}",head.name );
-        println!("!Base {}",base.name );
-        println!("!repo_path {}",repo_path );
+    fn create_pr(repo_path: &String, base: &Base, head: &Head) -> String {   
+        let title =  format!("{}-{}: {}", head.project, head.id, head.description);
         
         let output = Command::new("gh")
             .current_dir(repo_path)
             .arg("pr")
             .arg("create")
             .arg("--title")
-            .arg("Test title")
+            .arg(title)
             .arg("--body")
             .arg("The PR body test")
             .arg("--base")
